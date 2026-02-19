@@ -1,652 +1,380 @@
-<!DOCTYPE html>
-<html lang="id">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Link Store - Akses Cepat</title>
+<!doctype html>
+<html lang="id" class="h-full">
+ <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Multi-School Modular System</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap');
+    body { font-family: 'Plus Jakarta Sans', sans-serif; }
+    .tab-button.active { border-bottom: 4px solid #10b981; color: #065f46; background-color: #ecfdf5; }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .toast { animation: slideIn 0.3s ease-out; }
+    @keyframes slideIn { from { transform: translateY(-100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    .sh-btn-active { background-color: #059669; color: white; border-color: #059669; transform: scale(1.05); }
+
+    /* Animasi Denyut */
+    @keyframes pulseBlue {
+      0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.7); }
+      70% { transform: scale(1.03); box-shadow: 0 0 0 10px rgba(37, 99, 235, 0); }
+      100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); }
+    }
+    @keyframes pulseGreen {
+      0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+      70% { transform: scale(1.03); box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
+      100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+    }
+    .pulse-blue { animation: pulseBlue 2s infinite; }
+    .pulse-green { animation: pulseGreen 2s infinite; }
+  </style>
+ </head>
+ <body class="h-full bg-slate-50 text-slate-800">
+  <div id="app" class="w-full h-full overflow-auto"></div>
+
+  <script>
+    /**
+     * =========================================================================
+     * [SECTION 1] KONFIGURASI SISTEM UTAMA
+     * =========================================================================
+     */
+    const SYSTEM_CONFIG = {
+        GOOGLE_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbx7IjJZdiHITMGhSMSWWneT1E9qIWUOBwkuJv4krc4_IPk-pQYA1hgFXyNfMu9oKjr6Bw/exec',
+        PRAYER_ORDER: ['Subuh', 'Dzuhur', 'Ashar', 'Maghrib', 'Isya']
+    };
+
+    /**
+     * =========================================================================
+     * [SECTION 2] MODUL APLIKASI SISWA (TEMPAT KHUSUS KODE APLIKASI LAIN)
+     * =========================================================================
+     * Anda bisa mengganti object ini dengan logika aplikasi yang berbeda.
+     */
+    const STUDENT_APP_MODULE = {
+        categories: ['Shalat Fardu', 'Tarawih', 'Puasa', 'Tadarus', 'Ceramah'],
+
+        // Inisialisasi variabel data lokal aplikasi
+        initLocalState: function() {
+            window.shalatData = {}; window.tarawihData = {}; window.puasaData = {}; 
+            window.tadarusData = {}; window.ceramahData = {};
+            for (let i = 1; i <= 30; i++) {
+                window.shalatData[i] = { 'Subuh': null, 'Dzuhur': null, 'Ashar': null, 'Maghrib': null, 'Isya': null };
+                window.tarawihData[i] = { status: null, tempat: null };
+                window.puasaData[i] = null;
+                window.tadarusData[i] = { pilihan: null, surat: '', ayat: '' };
+                window.ceramahData[i] = { penceramah: '', tempat: '', ringkasan: '' };
+            }
+        },
+
+        // Kode UI Formulir (Input)
+        renderForm: function(container, tab) {
+            const days = Array.from({length: 30}, (_, i) => i + 1);
+            if (tab === 'Shalat Fardu') {
+                container.innerHTML = `<div class="space-y-8">${days.map(t => `
+                    <div class="p-5 border rounded-2xl bg-white shadow-sm border-l-8 border-emerald-500">
+                        <h3 class="font-black text-emerald-800 mb-4 flex justify-between">📅 Hari ke-${t} <span class="text-[10px] font-normal text-slate-400 italic">Shalat Wajib</span></h3>
+                        <div class="space-y-4">
+                            ${SYSTEM_CONFIG.PRAYER_ORDER.map(w => `
+                                <div class="flex flex-col md:flex-row md:items-center gap-3 pb-3 border-b border-gray-100 last:border-0">
+                                    <div class="w-24 font-bold text-gray-600">⏰ ${w}</div>
+                                    <div class="flex flex-wrap gap-2 flex-1">
+                                        ${['berjamaah','munfarid','haid','tidak shalat'].map(s => `
+                                            <button onclick="updateShalat(${t}, '${w}', '${s}')" class="px-3 py-1.5 text-[10px] rounded-full border-2 transition-all font-semibold ${window.shalatData[t]?.[w] === s ? 'sh-btn-active' : 'bg-white text-gray-500 border-gray-100'}">${s}</button>
+                                        `).join('')}
+                                    </div>
+                                    <button onclick="handleSavePrayer(${t}, '${w}')" class="px-3 py-1.5 text-[10px] rounded-lg bg-blue-600 text-white font-bold shadow hover:bg-blue-700 active:scale-95">💾 Simpan ${w}</button>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>`).join('')}</div>`;
+            } else if (tab === 'Tarawih') {
+                container.innerHTML = `<div class="space-y-6">${days.map(t => `<div class="p-5 border rounded-2xl border-l-8 border-indigo-500 shadow-sm"><h3 class="font-black text-indigo-900 mb-4">📅 Hari ke-${t}</h3><div class="mb-4"><p class="text-[10px] font-black text-gray-400 mb-2 uppercase tracking-widest">STATUS</p><div class="flex flex-wrap gap-2">${['berjamaah','munfarid','tidak mengerjakan','sakit','haid'].map(s => `<button onclick="updateTarawih(${t}, 'status', '${s}')" class="px-3 py-2 text-xs border-2 rounded-xl font-bold ${window.tarawihData[t]?.status === s ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white border-gray-100'}">${s}</button>`).join('')}</div></div><div class="mb-4"><p class="text-[10px] font-black text-gray-400 mb-2 uppercase tracking-widest">TEMPAT</p><div class="flex gap-2">${['mesjid','rumah'].map(tmp => `<button onclick="updateTarawih(${t}, 'tempat', '${tmp}')" class="px-4 py-2 text-xs border-2 rounded-xl font-bold ${window.tarawihData[t]?.tempat === tmp ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white border-gray-100'}">${tmp}</button>`).join('')}</div></div><button onclick="saveModuleData(${t})" class="w-full py-3 bg-indigo-600 text-white rounded-xl font-black shadow-lg">💾 SIMPAN TARAWIH</button></div>`).join('')}</div>`;
+            } else if (tab === 'Puasa') {
+                container.innerHTML = `<div class="space-y-4">${days.map(t => `<div class="p-5 border rounded-2xl border-l-8 border-orange-500 shadow-sm"><h3 class="font-black text-orange-900 mb-4">📅 Hari ke-${t}</h3><div class="flex flex-wrap gap-2 mb-4">${['mengerjakan','tidak mengerjakan','sakit','haid'].map(s => `<button onclick="updatePuasa(${t}, '${s}')" class="px-4 py-2 text-xs border-2 rounded-xl font-bold ${window.puasaData[t] === s ? 'bg-orange-500 text-white border-orange-500' : 'bg-white border-gray-100'}">${s}</button>`).join('')}</div><button onclick="saveModuleData(${t})" class="w-full py-3 bg-orange-500 text-white rounded-xl font-black shadow-lg">💾 SIMPAN PUASA</button></div>`).join('')}</div>`;
+            } else if (tab === 'Tadarus') {
+                container.innerHTML = `<div class="space-y-6">${days.map(t => `<div class="p-5 border rounded-2xl border-l-8 border-blue-500 shadow-sm"><h3 class="font-black text-blue-900 mb-4">📅 Hari ke-${t}</h3><div class="flex gap-2 mb-4">${['sendiri','ustadz'].map(m => `<button onclick="updateTadarus(${t}, 'pilihan', '${m}')" class="px-4 py-2 text-xs border-2 rounded-xl font-bold ${window.tadarusData[t]?.pilihan === m ? 'bg-blue-600 text-white border-blue-600' : 'bg-white border-gray-100'}">${m === 'sendiri' ? 'Sendiri' : 'Bersama Ustadz'}</button>`).join('')}</div><div class="grid grid-cols-2 gap-4 mb-4"><input type="text" oninput="updateTadarus(${t}, 'surat', this.value)" value="${window.tadarusData[t]?.surat || ''}" placeholder="Nama Surat" class="w-full p-3 border-2 border-gray-50 rounded-xl text-sm"><input type="text" oninput="updateTadarus(${t}, 'ayat', this.value)" value="${window.tadarusData[t]?.ayat || ''}" placeholder="Ayat" class="w-full p-3 border-2 border-gray-50 rounded-xl text-sm"></div><button onclick="saveModuleData(${t})" class="w-full py-3 bg-blue-600 text-white rounded-xl font-black shadow-lg">💾 SIMPAN TADARUS</button></div>`).join('')}</div>`;
+            } else if (tab === 'Ceramah') {
+                container.innerHTML = `<div class="space-y-6">${days.map(t => `<div class="p-5 border rounded-2xl border-l-8 border-rose-500 shadow-sm"><h3 class="font-black text-rose-900 mb-4">📅 Hari ke-${t}</h3><div class="space-y-3"><input type="text" oninput="updateCeramah(${t}, 'penceramah', this.value)" value="${window.ceramahData[t]?.penceramah || ''}" placeholder="Nama Penceramah" class="w-full p-3 border-2 border-gray-50 rounded-xl text-sm"><input type="text" oninput="updateCeramah(${t}, 'tempat', this.value)" value="${window.ceramahData[t]?.tempat || ''}" placeholder="Tempat / Media" class="w-full p-3 border-2 border-gray-50 rounded-xl text-sm"><textarea oninput="updateCeramah(${t}, 'ringkasan', this.value)" placeholder="Ringkasan isi ceramah..." class="w-full p-3 border-2 border-gray-50 rounded-xl text-sm h-24">${window.ceramahData[t]?.ringkasan || ''}</textarea></div><button onclick="saveModuleData(${t})" class="w-full mt-4 py-3 bg-rose-600 text-white rounded-xl font-black shadow-lg">💾 SIMPAN CERAMAH</button></div>`).join('')}</div>`;
+            }
+        },
+
+        // Kode Sinkronisasi data ke Variabel Lokal
+        syncFromServer: function(record) {
+            let d = record.detail;
+            if (typeof d === 'string') { try { d = JSON.parse(d); } catch(e){} }
+            if (record.kategori === 'Shalat Fardu') window.shalatData[record.tanggal] = d;
+            else if (record.kategori === 'Tarawih') window.tarawihData[record.tanggal] = d;
+            else if (record.kategori === 'Puasa') window.puasaData[record.tanggal] = d.status || d;
+            else if (record.kategori === 'Tadarus') window.tadarusData[record.tanggal] = d;
+            else if (record.kategori === 'Ceramah') window.ceramahData[record.tanggal] = d;
+        },
+
+        // Kode Tampilan Data di Rekap/Panel Guru
+        renderDetailDisplay: function(cat, data) {
+            let d = data;
+            if (typeof d === 'string') { try { d = JSON.parse(d); } catch(e){} }
+            if (!d) return '-';
+            if (cat === 'Shalat Fardu') {
+                return `<div class="flex flex-wrap gap-1">${SYSTEM_CONFIG.PRAYER_ORDER.map(w => {
+                    const s = d[w] || '-';
+                    let cls = 'bg-slate-50 text-slate-400';
+                    if (s === 'berjamaah') cls = 'bg-emerald-50 text-emerald-700 border-emerald-100';
+                    else if (s === 'munfarid') cls = 'bg-blue-50 text-blue-700 border-blue-100';
+                    else if (s === 'haid') cls = 'bg-purple-50 text-purple-700 border-purple-100';
+                    else if (s === 'tidak shalat') cls = 'bg-rose-50 text-rose-700 border-rose-100';
+                    return `<div class="flex-1 min-w-[70px] ${cls} p-1.5 rounded-lg border text-center text-[9px] font-bold shadow-sm"><span class="block text-[7px] uppercase mb-0.5 opacity-60">${w}</span>${s}</div>`;
+                }).join('')}</div>`;
+            }
+            if (cat === 'Tarawih') return `<div class="text-xs">Status: <b>${d.status || '-'}</b> | Lokasi: <b>${d.tempat || '-'}</b></div>`;
+            if (cat === 'Puasa') return `<b class="text-xs uppercase text-orange-600">${typeof d === 'string' ? d : d.status}</b>`;
+            if (cat === 'Tadarus') return `<div class="text-xs"><b>QS. ${d.surat || '-'}</b> (Ayat: ${d.ayat || '-'}), Metode: ${d.pilihan || '-'}</div>`;
+            if (cat === 'Ceramah') return `<div class="text-xs"><p class="font-bold">${d.penceramah || '-'}</p><p class="italic text-slate-500">"${d.ringkasan || '-'}"</p></div>`;
+            return JSON.stringify(d);
+        }
+    };
+
+    /**
+     * =========================================================================
+     * [SECTION 3] SISTEM INTI (CORE FRAMEWORK) - SISTEM LAMA TETAP
+     * =========================================================================
+     */
     
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- React & Babel -->
-    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    function getSchoolId() {
+        const params = new URLSearchParams(window.location.search);
+        let id = params.get('id');
+        if (!id && window.location.href.includes('id=')) id = window.location.href.split('id=')[1].split('&')[0];
+        return id;
+    }
 
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap');
-        body { 
-            font-family: 'Plus Jakarta Sans', sans-serif; 
-            margin: 0;
-            background-color: #f8fafc;
-            color: #1e293b;
-        }
-        .animate-in { animation: fadeIn 0.3s ease-out forwards; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        
-        .notif-badge {
-            animation: pulse-red 2s infinite;
-        }
-        @keyframes pulse-red {
-            0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
-            70% { transform: scale(1.1); box-shadow: 0 0 0 5px rgba(239, 68, 68, 0); }
-            100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
-        }
+    const SCHOOL_ID = getSchoolId();
+    let currentUser = JSON.parse(localStorage.getItem('ramadhanUser')) || null;
+    let currentTab = STUDENT_APP_MODULE.categories[0];
+    let registeredSchoolName = localStorage.getItem('registeredSchoolName') || "Sekolah";
+    let registeredAppName = localStorage.getItem('registeredAppName') || "Amalan Siswa";
+    let allRecords = [];
 
-        .slide-down {
-            animation: slideDown 0.5s ease-out forwards;
-        }
-        @keyframes slideDown {
-            from { transform: translateY(-100%); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
-        }
+    function isAdmin() { return currentUser && currentUser.nama === '*'; }
+    function showToast(m, s = true) {
+        const t = document.createElement('div');
+        t.className = `toast fixed top-4 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-2xl shadow-lg text-white z-[100] font-bold ${s ? 'bg-emerald-600' : 'bg-rose-600'}`;
+        t.textContent = m; document.body.appendChild(t); setTimeout(() => t.remove(), 3000);
+    }
 
-        .crop-container {
-            position: relative;
-            width: 100%;
-            height: 300px;
-            background: #0f172a;
-            overflow: hidden;
-            border-radius: 1rem;
-            cursor: move;
-        }
-        .crop-overlay {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 200px;
-            height: 200px;
-            border: 2px solid #10b981;
-            box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.6);
-            pointer-events: none;
-        }
+    // --- ACTIONS ---
+    window.updateShalat = (t, w, s) => { window.shalatData[t][w] = s; STUDENT_APP_MODULE.renderForm(document.getElementById('contentArea'), currentTab); };
+    window.updateTarawih = (t, k, v) => { window.tarawihData[t][k] = v; STUDENT_APP_MODULE.renderForm(document.getElementById('contentArea'), currentTab); };
+    window.updatePuasa = (t, v) => { window.puasaData[t] = v; STUDENT_APP_MODULE.renderForm(document.getElementById('contentArea'), currentTab); };
+    window.updateTadarus = (t, k, v) => { window.tadarusData[t][k] = v; };
+    window.updateCeramah = (t, k, v) => { window.ceramahData[t][k] = v; };
 
-        .btn-loading {
-            position: relative;
-            pointer-events: none;
-            opacity: 0.8;
-        }
-        
-        .spinner-small {
-            width: 16px;
-            height: 16px;
-            border: 2px solid rgba(255,255,255,0.3);
-            border-radius: 50%;
-            border-top-color: white;
-            animation: spin 0.8s linear infinite;
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
-
-        .skeleton-shimmer {
-            background: linear-gradient(90deg, #f1f5f9 25%, #f8fafc 50%, #f1f5f9 75%);
-            background-size: 200% 100%;
-            animation: shimmer 1.5s infinite;
-        }
-        @keyframes shimmer {
-            0% { background-position: 200% 0; }
-            100% { background-position: -200% 0; }
-        }
-    </style>
-</head>
-<body>
-    <div id="root"></div>
-
-    <script type="text/babel">
-        const { useState, useEffect, useRef } = React;
-        
-        const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxq2n3kzAG5R50oxk2_CHcxV5n3oorc1VwJu2IW3az2XMjxZcCGpW9WrdCV2G7pyG6i/exec";
-        const STORE_ID = "46ab0f5c-98f9-4e03-a67a-06a7669ae062";
-        const NOTIF_SOUND_URL = "https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3";
-
-        const Icon = ({ name, size = 24, className = "" }) => {
-            const iconUrl = `https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/${name}.svg`;
-            return <img src={iconUrl} alt={name} style={{ width: size, height: size }} className={className} />;
-        };
-
-        function App() {
-            // 1. Initial States
-            const [view, setView] = useState('store'); 
-            const [adminTab, setAdminTab] = useState('products'); 
-            const [products, setProducts] = useState([]);
-            const [orders, setOrders] = useState([]);
-            const [paymentConfig, setPaymentConfig] = useState({ 
-                bankName: '', bankAccount: '', bankHolder: '', 
-                qrisNotes: '', qrisUrl: '', 
-                danaNumber: '', danaHolder: '',
-                isBankActive: true, isQrisActive: true, isDanaActive: false
-            });
-            const [loading, setLoading] = useState(true);
-            const [error, setError] = useState(null);
-            const [soundEnabled, setSoundEnabled] = useState(false);
-            const [appNotification, setAppNotification] = useState('');
-            
-            // UI States
-            const [secretClickCount, setSecretClickCount] = useState(0);
-            const [deleteTarget, setDeleteTarget] = useState(null);
-            const [cropData, setCropData] = useState({ show: false, src: null, scale: 1, x: 0, y: 0 });
-            const [isSavingCrop, setIsSavingCrop] = useState(false);
-            const cropImgRef = useRef(null);
-
-            const [showModal, setShowModal] = useState(null);
-            const [step, setStep] = useState('form'); 
-            const [selectedMethod, setSelectedMethod] = useState(null);
-            const [proofImage, setProofImage] = useState(null);
-            const [isCompressing, setIsCompressing] = useState(false);
-            const [isActionLoading, setIsActionLoading] = useState(false);
-            const [buyerData, setBuyerData] = useState({ name: '', phone: '', school: '' });
-
-            const [productForm, setProductForm] = useState({ id: '', name: '', url: '', price: '', stock: '', image: '' });
-            const [isEditing, setIsEditing] = useState(false);
-
-            // Compute pendingCount
-            const pendingCount = orders.filter(o => String(o.status).toLowerCase() === 'pending').length;
-            const lastPendingCountRef = useRef(0);
-
-            const playSound = () => {
-                if (soundEnabled) {
-                    const audio = new Audio(NOTIF_SOUND_URL);
-                    audio.play().catch(e => {});
-                }
-            };
-
-            const fetchData = async () => {
-                try {
-                    const res = await fetch(`${SCRIPT_URL}?action=getData&storeId=${STORE_ID}&_=${Date.now()}`);
-                    const data = await res.json();
-                    if (data && data.status !== "error") {
-                        setProducts(data.products || []);
-                        const newOrders = data.orders || [];
-                        const currentPending = newOrders.filter(o => String(o.status).toLowerCase() === 'pending').length;
-                        if (currentPending > lastPendingCountRef.current) playSound();
-                        lastPendingCountRef.current = currentPending;
-                        setOrders(newOrders);
-                        
-                        if (data.config) {
-                            const cfg = data.config;
-                            setPaymentConfig(prev => ({
-                                ...prev,
-                                bankName: cfg.bankName || '',
-                                bankAccount: cfg.bankAccount || '',
-                                bankHolder: cfg.bankHolder || '',
-                                qrisNotes: cfg.qrisNotes || '',
-                                qrisUrl: cfg.qrisUrl || '',
-                                danaNumber: cfg.danaNumber || '',
-                                danaHolder: cfg.danaHolder || '',
-                                isBankActive: cfg.isBankActive === 'true' || cfg.isBankActive === true,
-                                isQrisActive: cfg.isQrisActive === 'true' || cfg.isQrisActive === true,
-                                isDanaActive: cfg.isDanaActive === 'true' || cfg.isDanaActive === true,
-                            }));
-                        }
-                        setError(null);
-                    } else {
-                        setError(data.message || "Gagal mengambil data.");
-                    }
-                    setLoading(false);
-                } catch (e) {
-                    setError("Koneksi gagal. Cek Deployment Google Script.");
-                    setLoading(false);
-                }
-            };
-
-            useEffect(() => {
-                fetchData();
-                const interval = setInterval(fetchData, 30000); 
-                return () => clearInterval(interval);
-            }, [soundEnabled]);
-
-            const handlePost = async (payload) => {
-                try {
-                    const res = await fetch(SCRIPT_URL, { 
-                        method: 'POST', 
-                        mode: 'no-cors', 
-                        body: JSON.stringify({ ...payload, storeId: STORE_ID }) 
-                    });
-                    return true;
-                } catch (e) { return false; }
-            };
-
-            const handleSecretClick = () => {
-                const newCount = secretClickCount + 1;
-                setSecretClickCount(newCount);
-                if (newCount >= 5) {
-                    setView(view === 'admin' ? 'store' : 'admin');
-                    setSecretClickCount(0);
-                    if (view !== 'admin') {
-                        setSoundEnabled(true);
-                        fetchData();
-                    }
-                }
-                setTimeout(() => setSecretClickCount(0), 3000);
-            };
-
-            const saveProduct = async () => {
-                const { id, name, url, price, stock, image } = productForm;
-                if(!name || !url || !price || !stock) return alert("Lengkapi data produk!");
-
-                setLoading(true);
-                const actionType = isEditing ? 'updateProduct' : 'addProduct';
-                const success = await handlePost({ 
-                    action: actionType, 
-                    id: isEditing ? id : undefined,
-                    name, url, price: Number(price), stock: Number(stock), image
-                });
-
-                if (success) {
-                    setAppNotification(isEditing ? "PRODUK DIPERBARUI!" : "PRODUK DITAMBAHKAN!");
-                    setTimeout(() => setAppNotification(''), 3000);
-                    setProductForm({ id: '', name: '', url: '', price: '', stock: '', image: '' });
-                    setIsEditing(false);
-                    setTimeout(fetchData, 2000);
-                } else {
-                    alert("Gagal menyimpan data.");
-                    setLoading(false);
-                }
-            };
-
-            const startEditProduct = (p) => {
-                setProductForm({ id: p.id || '', name: p.name || '', url: p.url || '', price: p.price || '', stock: p.stock || '', image: p.image || '' });
-                setIsEditing(true);
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-            };
-
-            const confirmDelete = async () => {
-                if (!deleteTarget) return;
-                setLoading(true);
-                const productId = deleteTarget.id;
-                const deleteName = deleteTarget.name;
-                setDeleteTarget(null);
-                const success = await handlePost({ action: 'deleteProduct', id: productId });
-                if (success) {
-                    setAppNotification(`PRODUK "${deleteName}" DIHAPUS.`);
-                    setTimeout(() => setAppNotification(''), 3000);
-                    setTimeout(fetchData, 2000);
-                } else {
-                    alert("Gagal menghapus.");
-                    setLoading(false);
-                }
-            };
-
-            const savePaymentConfig = async () => {
-                setLoading(true);
-                const success = await handlePost({ action: 'updateConfig', ...paymentConfig });
-                if (success) {
-                    setAppNotification("PENGATURAN DISIMPAN!");
-                    setTimeout(() => setAppNotification(''), 3000);
-                    setTimeout(fetchData, 2000);
-                } else {
-                    alert("Gagal menyimpan pengaturan.");
-                    setLoading(false);
-                }
-            };
-
-            const handleCropSave = () => {
-                setIsSavingCrop(true);
-                const canvas = document.createElement('canvas');
-                const ctx = canvas.getContext('2d');
-                const img = cropImgRef.current;
-                canvas.width = 400; canvas.height = 400;
-                const zoom = cropData.scale;
-                ctx.fillStyle = "white"; ctx.fillRect(0,0, 400, 400);
-                const drawW = img.naturalWidth * zoom;
-                const drawH = img.naturalHeight * zoom;
-                const centerX = 200 + (cropData.x * 2);
-                const centerY = 200 + (cropData.y * 2);
-                ctx.drawImage(img, centerX - (drawW/2), centerY - (drawH/2), drawW, drawH);
-                const base64 = canvas.toDataURL('image/jpeg', 0.6);
-                setProductForm({ ...productForm, image: base64 });
-                setCropData({ ...cropData, show: false });
-                setIsSavingCrop(false);
-            };
-
-            const [isDragging, setIsDragging] = useState(false);
-            const [startPos, setStartPos] = useState({ x: 0, y: 0 });
-            const handleMouseDown = (e) => { setIsDragging(true); setStartPos({ x: e.clientX - cropData.x, y: e.clientY - cropData.y }); };
-            const handleMouseMove = (e) => { if (isDragging) setCropData({ ...cropData, x: e.clientX - startPos.x, y: e.clientY - startPos.y }); };
-            const handleMouseUp = () => { setIsDragging(false); };
-
-            const formatIDR = (n) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(n);
-            
-            const formatPhoneDisplay = (phone) => {
-                let p = String(phone || '').trim();
-                if (!p) return '';
-                return p.startsWith('0') ? p : '0' + p;
-            };
-
-            const getWALink = (phone, text) => {
-                const phoneStr = formatPhoneDisplay(phone);
-                const cleanPhone = phoneStr.replace(/\D/g, '');
-                if (!cleanPhone) return '#';
-                const apiPhone = cleanPhone.startsWith('0') ? '62' + cleanPhone.slice(1) : cleanPhone;
-                return `https://wa.me/${apiPhone}?text=${encodeURIComponent(text)}`;
-            };
-
-            const handleNextToPayment = () => {
-                if (buyerData.name && buyerData.phone && buyerData.school) {
-                    setIsActionLoading(true);
-                    setTimeout(() => { setStep('payment'); setIsActionLoading(false); }, 600);
-                } else { alert("Isi semua data!"); }
-            };
-
-            const handleFinishOrder = async () => {
-                if (!proofImage) return alert("Upload bukti transfer!");
-                setIsActionLoading(true);
-                const uniqueId = "TRX-" + Math.floor(Math.random() * 900000 + 100000);
-                const payload = {
-                    action: 'addOrder', id: uniqueId, productId: showModal.id,
-                    productName: showModal.name, productUrl: showModal.url, price: showModal.price, 
-                    method: selectedMethod, proof: proofImage,
-                    buyerName: buyerData.name, buyerPhone: buyerData.phone, buyerSchool: buyerData.school,
-                    status: 'pending' 
-                };
-                const success = await handlePost(payload);
-                if(success) { setStep('success'); } else { alert("Gagal mengirim data. Cek koneksi."); }
-                setIsActionLoading(false);
-                fetchData();
-            };
-
-            return (
-                <div className="min-h-screen pb-20 text-sm relative text-slate-800">
-                    {error && (
-                        <div className="bg-red-600 text-white p-4 text-center font-bold sticky top-0 z-[60] shadow-lg animate-pulse uppercase">
-                           ⚠️ Koneksi Terganggu: {error}
+    // --- VIEWS ---
+    function renderRegistration() {
+        document.getElementById('app').innerHTML = `
+            <div class="min-h-screen flex items-center justify-center p-6 bg-emerald-600">
+                <div class="bg-white p-10 rounded-[2.5rem] shadow-2xl w-full max-w-md">
+                    <div class="text-center mb-8"><h1 class="text-3xl font-black text-slate-800">Daftar Sekolah</h1><p class="text-slate-400 text-sm mt-2">Buat database mandiri secara otomatis.</p></div>
+                    <form id="regForm" class="space-y-4">
+                        <input type="email" id="regEmail" placeholder="Email Guru (Admin)" class="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl outline-none focus:border-emerald-500 transition-all" required>
+                        <input type="text" id="regSchool" placeholder="Nama Sekolah (Misal: SMPN 1 TES)" class="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl outline-none focus:border-emerald-500 transition-all" required>
+                        <input type="text" id="regAppName" placeholder="Nama Aplikasi (Misal: Amalan Siswa)" class="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl outline-none focus:border-emerald-500 transition-all" required>
+                        <button type="submit" id="regBtn" class="w-full bg-emerald-600 text-white p-4 rounded-2xl font-black shadow-lg">Daftar & Buat Database</button>
+                    </form>
+                    <div id="regResult" class="mt-8 hidden p-6 bg-slate-900 rounded-3xl text-white">
+                        <p class="text-[10px] font-bold text-emerald-400 uppercase mb-2">Link Akses Anda:</p>
+                        <textarea id="shareLink" class="w-full p-3 text-[11px] font-mono border rounded-xl bg-slate-800 border-slate-700 h-24 mb-3" readonly></textarea>
+                        <div class="grid grid-cols-2 gap-3">
+                            <button onclick="downloadLink()" class="py-3 bg-blue-600 text-white rounded-xl font-bold pulse-blue shadow-lg text-xs">Unduh Link</button>
+                            <button onclick="copyLink()" class="py-3 bg-emerald-600 text-white rounded-xl font-bold pulse-green shadow-lg text-xs">Salin Link</button>
                         </div>
-                    )}
-
-                    {appNotification && (
-                        <div className="fixed top-0 left-0 w-full z-[100] p-4 slide-down">
-                            <div className="bg-emerald-600 text-white p-4 rounded-2xl shadow-2xl flex items-center justify-center gap-3 max-w-md mx-auto border-2 border-emerald-500 font-bold tracking-tight text-center uppercase">
-                                <Icon name="bell" size={20} className="text-emerald-100" /> {appNotification}
-                            </div>
-                        </div>
-                    )}
-
-                    <nav className="bg-white border-b sticky top-0 z-20 px-6 h-16 flex items-center justify-between shadow-sm">
-                        <div className="flex items-center gap-2 font-bold text-emerald-600 text-xl cursor-pointer select-none" onClick={handleSecretClick}>
-                            <Icon name="shopping-bag" className="text-emerald-600" /> 
-                            <span>LinkStore</span>
-                            {view === 'admin' && <span className="text-[10px] bg-emerald-100 px-2 py-0.5 rounded-full ml-2 font-black uppercase">Mode Admin</span>}
-                        </div>
-                        <div className="bg-slate-100 p-1 rounded-xl flex gap-1">
-                            <button onClick={() => setView('store')} className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${view === 'store' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500'}`}>Toko</button>
-                            {view === 'admin' && (
-                                <button onClick={() => setView('store')} className="px-4 py-1.5 rounded-lg text-xs font-bold transition-all bg-red-50 text-red-600 shadow-sm">Keluar Admin</button>
-                            )}
-                        </div>
-                    </nav>
-
-                    <main className="max-w-5xl mx-auto px-4 py-8">
-                        {loading && products.length === 0 && !error ? (
-                            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 px-2">
-                                {[1,2,3,4,5,6].map(i => (
-                                    <div key={i} className="bg-white rounded-[2.5rem] border shadow-sm h-[400px] overflow-hidden flex flex-col">
-                                        <div className="h-56 w-full skeleton-shimmer"></div>
-                                        <div className="p-6 space-y-4 flex-grow flex flex-col">
-                                            <div className="h-6 w-3/4 skeleton-shimmer rounded-full"></div>
-                                            <div className="h-4 w-1/2 skeleton-shimmer rounded-full"></div>
-                                            <div className="h-12 w-full skeleton-shimmer rounded-2xl mt-auto"></div>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        ) : (
-                            <>
-                                {view === 'admin' ? (
-                                    <div className="animate-in space-y-6">
-                                        <div className="flex gap-4 border-b pb-1 overflow-x-auto whitespace-nowrap">
-                                            <button onClick={() => setAdminTab('products')} className={`pb-4 px-2 text-sm font-bold ${adminTab === 'products' ? 'border-b-2 border-emerald-600 text-emerald-600' : 'text-slate-400'}`}>Produk</button>
-                                            <button onClick={() => setAdminTab('orders')} className={`pb-4 px-2 text-sm font-bold relative ${adminTab === 'orders' ? 'border-b-2 border-emerald-600 text-emerald-600' : 'text-slate-400'}`}> Pesanan {pendingCount > 0 && <span className="ml-2 bg-red-500 text-white text-[9px] px-1.5 py-0.5 rounded-full notif-badge font-bold">{pendingCount}</span>}</button>
-                                            <button onClick={() => setAdminTab('payments')} className={`pb-4 px-2 text-sm font-bold ${adminTab === 'payments' ? 'border-b-2 border-emerald-600 text-emerald-600' : 'text-slate-400'}`}>Pembayaran</button>
-                                        </div>
-                                        {adminTab === 'products' && (
-                                            <div className="grid md:grid-cols-3 gap-8">
-                                                <div className="bg-white p-6 rounded-3xl border shadow-sm h-fit space-y-4 sticky top-20">
-                                                    <h3 className="font-bold text-xs uppercase text-slate-400 tracking-widest font-black">{isEditing ? 'Edit Produk' : 'Tambah Baru'}</h3>
-                                                    <div onClick={() => document.getElementById('prodImg').click()} className="relative aspect-square border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50 flex flex-col items-center justify-center cursor-pointer hover:border-emerald-400 transition-all overflow-hidden">
-                                                        <input type="file" id="prodImg" className="hidden" accept="image/*" onChange={(e) => {
-                                                            const file = e.target.files[0];
-                                                            if (file) {
-                                                                const reader = new FileReader();
-                                                                reader.onload = () => setCropData({ ...cropData, src: reader.result, show: true, scale: 1, x: 0, y: 0 });
-                                                                reader.readAsDataURL(file);
-                                                            }
-                                                        }} />
-                                                        {productForm.image ? <img src={productForm.image} className="w-full h-full object-cover" /> : <div className="text-center text-slate-400"><Icon name="image" size={32} className="mx-auto opacity-30" /><p className="text-[10px] font-bold uppercase tracking-widest font-black">Foto Sampul</p></div>}
-                                                    </div>
-                                                    <input className="w-full p-3 bg-slate-50 border rounded-xl text-sm font-medium" placeholder="Nama Produk" value={productForm.name || ''} onChange={e => setProductForm({...productForm, name: e.target.value})} />
-                                                    <input className="w-full p-3 bg-slate-50 border rounded-xl text-sm font-medium" placeholder="URL Link" value={productForm.url || ''} onChange={e => setProductForm({...productForm, url: e.target.value})} />
-                                                    <div className="grid grid-cols-2 gap-2">
-                                                        <input className="w-full p-3 bg-slate-50 border rounded-xl text-sm font-medium" type="number" placeholder="Harga" value={productForm.price || ''} onChange={e => setProductForm({...productForm, price: e.target.value})} />
-                                                        <input className="w-full p-3 bg-slate-50 border rounded-xl text-sm font-medium" type="number" placeholder="Stok" value={productForm.stock || ''} onChange={e => setProductForm({...productForm, stock: e.target.value})} />
-                                                    </div>
-                                                    <button onClick={saveProduct} className={`w-full py-3 text-white font-bold rounded-xl shadow-lg text-xs uppercase font-black transition-all ${isEditing ? 'bg-amber-500 hover:bg-amber-600' : 'bg-emerald-600 hover:bg-emerald-700'}`}>{isEditing ? 'Perbarui Produk' : 'Simpan Produk'}</button>
-                                                    {isEditing && <button onClick={() => { setProductForm({ id: '', name: '', url: '', price: '', stock: '', image: '' }); setIsEditing(false); }} className="w-full py-2 text-slate-400 font-bold text-xs uppercase underline text-center font-black">Batal Edit</button>}
-                                                </div>
-                                                <div className="md:col-span-2 space-y-3">
-                                                    {products.length === 0 ? <p className="text-center py-20 text-slate-400 font-medium italic">Belum ada produk.</p> : products.map((p, i) => (
-                                                        <div key={i} className="bg-white p-4 rounded-2xl border flex justify-between items-center group shadow-sm transition-all hover:border-emerald-200">
-                                                            <div className="flex items-center gap-4">
-                                                                <img src={p.image || 'https://placehold.co/400x400?text=Link'} className="w-14 h-14 object-cover rounded-xl border bg-slate-100" />
-                                                                <div><p className="font-bold text-slate-700">{p.name}</p><div className="flex gap-2 items-center mt-0.5"><span className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase ${Number(p.stock) <= 0 ? 'bg-red-50 text-red-500' : 'bg-slate-100 text-slate-500'}`}>Stok: {p.stock}</span><span className="text-[10px] text-emerald-600 font-bold">{formatIDR(p.price)}</span></div></div>
-                                                            </div>
-                                                            <div className="flex gap-1">
-                                                                <button onClick={() => startEditProduct(p)} className="text-amber-500 p-2 hover:bg-amber-50 rounded-lg transition-colors"><Icon name="edit-3" size={18}/></button>
-                                                                <button onClick={() => setDeleteTarget(p)} className="text-red-400 p-2 hover:bg-red-50 rounded-lg transition-colors"><Icon name="trash-2" size={18}/></button>
-                                                            </div>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
-                                        {adminTab === 'orders' && (
-                                            <div className="space-y-4">
-                                                {orders.length === 0 ? <p className="text-center py-20 text-slate-400 italic font-bold text-center">Belum ada pesanan masuk.</p> : [...orders].reverse().map((o, i) => (
-                                                    <div key={i} className={`bg-white p-5 rounded-3xl border shadow-sm flex flex-col md:flex-row gap-6 transition-all ${String(o.status).toLowerCase() === 'pending' ? 'border-amber-300 ring-1 ring-amber-50 shadow-lg shadow-amber-50' : 'hover:border-emerald-200'}`}>
-                                                        <img src={o.proof} className="w-24 h-32 object-cover rounded-2xl border bg-slate-100 flex-shrink-0 cursor-zoom-in" onClick={() => window.open(o.proof)} />
-                                                        <div className="flex-grow space-y-3">
-                                                            <div className="flex justify-between items-start">
-                                                                <div className="flex items-center gap-2">
-                                                                    <p className="font-bold text-lg text-slate-800">{o.productName}</p>
-                                                                    {String(o.status).toLowerCase() === 'pending' && <span className="bg-amber-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded animate-pulse uppercase">Baru</span>}
-                                                                </div>
-                                                                <span className={`status-badge ${String(o.status).toLowerCase() === 'berhasil' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{o.status || 'pending'}</span>
-                                                            </div>
-                                                            <div className="text-[10px] space-y-1.5 bg-slate-50 p-4 rounded-2xl border">
-                                                                <p className="flex justify-between"><span>PEMBELI:</span> <b className="text-slate-800 font-bold">{o.buyerName}</b></p>
-                                                                <p className="flex justify-between"><span>WHATSAPP:</span> <b className="text-slate-800 font-bold">{formatPhoneDisplay(o.buyerPhone)}</b></p>
-                                                            </div>
-                                                            <button onClick={async () => {
-                                                                await handlePost({ action: 'updateOrderStatus', id: o.id, status: 'Berhasil' });
-                                                                window.open(getWALink(o.buyerPhone, `Halo ${o.buyerName},\n\nTerima kasih. Berikut link *${o.productName}* Anda: ${o.productUrl}`), '_blank');
-                                                                fetchData();
-                                                            }} className={`inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl font-bold text-xs shadow-sm transition-all ${String(o.status).toLowerCase() === 'berhasil' ? 'bg-slate-100 text-slate-400' : 'bg-emerald-600 text-white hover:bg-emerald-700'}`}><Icon name="send" size={14} className="text-white" /> {String(o.status).toLowerCase() === 'berhasil' ? 'Kirim Ulang Link' : 'Kirim Link & Selesaikan'}</button>
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        )}
-                                        {adminTab === 'payments' && (
-                                            <div className="max-w-3xl mx-auto space-y-6">
-                                                <div className="bg-white p-6 rounded-3xl border shadow-sm space-y-6">
-                                                    <h3 className="font-bold text-slate-800 underline underline-offset-4 decoration-emerald-500 font-black uppercase">Pengaturan Pembayaran</h3>
-                                                    <div className="p-5 bg-slate-50 rounded-2xl border space-y-4">
-                                                        <div className="flex justify-between items-center"><h4 className="font-bold text-xs uppercase text-slate-500 font-black">Transfer Bank</h4><input type="checkbox" checked={paymentConfig.isBankActive} onChange={e => setPaymentConfig({...paymentConfig, isBankActive: e.target.checked})} className="w-5 h-5 accent-emerald-500" /></div>
-                                                        <div className="grid sm:grid-cols-2 gap-4">
-                                                            <input className="p-3 bg-white border rounded-xl text-sm font-medium" placeholder="Nama Bank" value={paymentConfig.bankName || ''} onChange={e => setPaymentConfig({...paymentConfig, bankName: e.target.value})} />
-                                                            <input className="p-3 bg-white border rounded-xl text-sm font-medium" placeholder="Nomor Rekening" value={paymentConfig.bankAccount || ''} onChange={e => setPaymentConfig({...paymentConfig, bankAccount: e.target.value})} />
-                                                        </div>
-                                                        <input className="w-full p-3 bg-white border rounded-xl text-sm font-medium" placeholder="Nama Pemilik" value={paymentConfig.bankHolder || ''} onChange={e => setPaymentConfig({...paymentConfig, bankHolder: e.target.value})} />
-                                                    </div>
-                                                    <div className="p-5 bg-slate-50 rounded-2xl border space-y-4">
-                                                        <div className="flex justify-between items-center"><h4 className="font-bold text-xs uppercase text-slate-500 font-black">QRIS Barcode</h4><input type="checkbox" checked={paymentConfig.isQrisActive} onChange={e => setPaymentConfig({...paymentConfig, isQrisActive: e.target.checked})} className="w-5 h-5 accent-emerald-500" /></div>
-                                                        <input className="w-full p-3 bg-white border rounded-xl text-sm font-medium" placeholder="URL Gambar QRIS" value={paymentConfig.qrisUrl || ''} onChange={e => setPaymentConfig({...paymentConfig, qrisUrl: e.target.value})} />
-                                                        <textarea className="w-full p-3 bg-white border rounded-xl text-sm h-20 font-medium" placeholder="Catatan QRIS" value={paymentConfig.qrisNotes || ''} onChange={e => setPaymentConfig({...paymentConfig, qrisNotes: e.target.value})} />
-                                                    </div>
-                                                    <div className="p-5 bg-slate-50 rounded-2xl border space-y-4">
-                                                        <div className="flex justify-between items-center"><h4 className="font-bold text-xs uppercase text-slate-500 font-black">E-Wallet (DANA)</h4><input type="checkbox" checked={paymentConfig.isDanaActive} onChange={e => setPaymentConfig({...paymentConfig, isDanaActive: e.target.checked})} className="w-5 h-5 accent-emerald-500" /></div>
-                                                        <div className="grid sm:grid-cols-2 gap-4">
-                                                            <input className="p-3 bg-white border rounded-xl text-sm font-medium" placeholder="Nomor DANA" value={paymentConfig.danaNumber || ''} onChange={e => setPaymentConfig({...paymentConfig, danaNumber: e.target.value})} />
-                                                            <input className="p-3 bg-white border rounded-xl text-sm font-medium" placeholder="Nama Akun DANA" value={paymentConfig.danaHolder || ''} onChange={e => setPaymentConfig({...paymentConfig, danaHolder: e.target.value})} />
-                                                        </div>
-                                                    </div>
-                                                    <button onClick={savePaymentConfig} className="w-full py-4 bg-slate-900 text-white font-bold rounded-2xl shadow-xl hover:bg-black uppercase text-xs tracking-widest font-black transition-all">Simpan Perubahan</button>
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                ) : (
-                                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 px-2 animate-in">
-                                        {products.filter(p => Number(p.stock) > 0).map((p, i) => (
-                                            <div key={i} className="bg-white rounded-[2.5rem] border shadow-sm flex flex-col group hover:shadow-2xl transition-all duration-500 overflow-hidden">
-                                                <div className="h-56 w-full bg-slate-100 relative overflow-hidden">
-                                                    {p.image ? <img src={p.image} className="w-full h-full object-cover group-hover:scale-110 transition-all duration-700" /> : <div className="w-full h-full flex items-center justify-center text-emerald-600/10"><Icon name="link" size={80} /></div>}
-                                                    <div className="absolute top-4 left-4 bg-emerald-500 text-white px-3 py-1 rounded-full font-black text-xs shadow-lg">{formatIDR(p.price)}</div>
-                                                    <div className="absolute bottom-4 right-4 bg-white/90 backdrop-blur-sm px-2 py-0.5 rounded-lg text-[9px] font-bold uppercase text-slate-600 tracking-widest font-black">Stok: {p.stock}</div>
-                                                </div>
-                                                <div className="p-6 flex flex-col flex-grow">
-                                                    <h3 className="text-xl font-bold mb-8 flex-grow leading-tight text-slate-800">{p.name}</h3>
-                                                    <button onClick={() => { setShowModal(p); setStep('form'); setProofImage(null); }} className="w-full py-4 bg-slate-900 text-white font-bold rounded-2xl shadow-lg hover:bg-black transition-all uppercase text-[11px] tracking-widest font-black">Beli Sekarang</button>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </>
-                        )}
-                    </main>
-
-                    {deleteTarget && (
-                        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-in zoom-in">
-                            <div className="bg-white w-full max-w-sm rounded-3xl p-8 text-center shadow-2xl border-2">
-                                <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4"><Icon name="trash-2" size={32} /></div>
-                                <div><h3 className="text-xl font-bold text-slate-800">Hapus Produk?</h3><p className="text-slate-500 text-sm mt-2">Menghapus <b className="text-slate-700">{deleteTarget.name}</b> secara permanen.</p></div>
-                                <div className="flex gap-3 pt-6">
-                                    <button onClick={() => setDeleteTarget(null)} className="flex-1 py-3 bg-slate-100 text-slate-600 font-bold rounded-2xl text-xs uppercase font-black">Batal</button>
-                                    <button onClick={confirmDelete} className="flex-1 py-3 bg-red-500 text-white font-bold rounded-2xl shadow-lg shadow-red-200 text-xs uppercase tracking-wider font-black">Ya, Hapus</button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {cropData.show && (
-                        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/95 backdrop-blur-md">
-                            <div className="bg-white w-full max-w-md rounded-[2.5rem] p-8 space-y-6 animate-in zoom-in shadow-2xl border-4 border-slate-800">
-                                <div className="text-center"><h3 className="text-2xl font-bold text-slate-800 font-black">Atur Foto Produk</h3><p className="text-xs text-slate-400 mt-1 uppercase font-bold tracking-widest">Geser dan perbesar gambar</p></div>
-                                <div className="crop-container border-4 border-slate-100" onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}>
-                                    <img ref={cropImgRef} src={cropData.src} className="absolute max-w-none pointer-events-none" style={{ transform: `translate(calc(-50% + ${cropData.x}px), calc(-50% + ${cropData.y}px)) scale(${cropData.scale})`, top: '50%', left: '50%' }} />
-                                    <div className="crop-overlay"></div>
-                                </div>
-                                <div className="space-y-4">
-                                    <div className="flex items-center gap-4"><Icon name="minus" size={16} /><input type="range" className="flex-grow accent-emerald-500 h-1.5" min="0.1" max="3" step="0.01" value={cropData.scale} onChange={(e) => setCropData({ ...cropData, scale: Number(e.target.value) })} /><Icon name="plus" size={16} /></div>
-                                    <button onClick={handleCropSave} className="w-full py-4 bg-emerald-600 text-white font-bold rounded-2xl shadow-xl uppercase text-xs tracking-widest font-black">Simpan Foto</button>
-                                    <button onClick={() => setCropData({ ...cropData, show: false })} className="w-full text-slate-400 font-bold text-[10px] uppercase underline text-center font-black">Batal</button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {showModal && (
-                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-in">
-                            <div className="bg-white w-full max-w-md rounded-[2.5rem] p-8 relative shadow-2xl overflow-hidden border-t-8 border-emerald-500">
-                                {step !== 'success' && (<button onClick={() => setShowModal(null)} className="absolute right-8 top-8 text-slate-400 p-2 hover:bg-slate-50 rounded-full transition-all"><Icon name="x"/></button>)}
-                                {step === 'form' && (
-                                    <div className="space-y-6">
-                                        <h3 className="text-3xl font-black italic text-emerald-600 uppercase underline tracking-tighter">Checkout</h3>
-                                        <div className="space-y-4">
-                                            <input className="w-full p-4 bg-slate-50 border rounded-2xl text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Nama Lengkap" value={buyerData.name} onChange={e => setBuyerData({...buyerData, name: e.target.value})} />
-                                            <input className="w-full p-4 bg-slate-50 border rounded-2xl text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-500" placeholder="WhatsApp (0812...)" value={buyerData.phone} onChange={e => setBuyerData({...buyerData, phone: e.target.value})} />
-                                            <input className="w-full p-4 bg-slate-50 border rounded-2xl text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Sekolah / Instansi" value={buyerData.school} onChange={e => setBuyerData({...buyerData, school: e.target.value})} />
-                                        </div>
-                                        <button onClick={handleNextToPayment} className={`w-full py-4 bg-emerald-600 text-white font-bold rounded-2xl shadow-xl text-xs uppercase tracking-widest hover:bg-emerald-700 transition-all font-black flex items-center justify-center gap-2 ${isActionLoading ? 'btn-loading' : ''}`}>
-                                            {isActionLoading ? <div className="spinner-small"></div> : null}
-                                            {isActionLoading ? 'MEMPROSES...' : 'Lanjut ke Pembayaran'}
-                                        </button>
-                                    </div>
-                                )}
-                                {step === 'payment' && (
-                                    <div className="space-y-6 text-center">
-                                        <h3 className="text-2xl font-bold uppercase italic tracking-tight font-black">Pilih Metode</h3>
-                                        <div className="space-y-3 text-left">
-                                            {paymentConfig.isQrisActive && <button onClick={() => { setSelectedMethod('QRIS'); setStep('detail'); }} className="w-full p-5 border-2 rounded-2xl flex items-center gap-4 hover:border-emerald-600 font-bold uppercase text-xs transition-all font-black"><Icon name="qr-code" size={24}/> Scan QRIS</button>}
-                                            {paymentConfig.isBankActive && <button onClick={() => { setSelectedMethod('BANK'); setStep('detail'); }} className="w-full p-5 border-2 rounded-2xl flex items-center gap-4 hover:border-emerald-600 font-bold uppercase text-xs transition-all font-black"><Icon name="credit-card" size={24}/> Transfer {paymentConfig.bankName}</button>}
-                                            {paymentConfig.isDanaActive && <button onClick={() => { setSelectedMethod('DANA'); setStep('detail'); }} className="w-full p-5 border-2 rounded-2xl flex items-center gap-4 hover:border-emerald-600 font-bold uppercase text-xs transition-all font-black"> <div className="w-6 h-6 flex items-center justify-center bg-sky-600 text-white rounded font-black italic">D</div> DANA E-Wallet</button>}
-                                        </div>
-                                    </div>
-                                )}
-                                {step === 'detail' && (
-                                    <div className="text-center space-y-6 animate-in">
-                                        <div className="bg-emerald-50 p-5 rounded-[2rem] border border-emerald-100 shadow-inner"><p className="text-xs font-bold text-emerald-500 uppercase tracking-widest mb-1 font-black">Total Tagihan</p><p className="text-4xl font-black text-emerald-600 leading-none">{formatIDR(showModal.price)}</p></div>
-                                        {selectedMethod === 'QRIS' && (
-                                            <div className="space-y-4">
-                                                {paymentConfig.qrisUrl ? <img src={paymentConfig.qrisUrl} className="w-48 h-48 mx-auto border-4 border-slate-900 rounded-[2rem] p-2 bg-white shadow-xl" /> : <p className="text-xs text-slate-400 font-bold uppercase tracking-widest py-10 bg-slate-50 border-2 border-dashed rounded-2xl">QRIS Belum Tersedia</p>}
-                                                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide italic leading-relaxed font-medium">{paymentConfig.qrisNotes}</p>
-                                            </div>
-                                        )}
-                                        {selectedMethod === 'BANK' && (
-                                            <div className="text-left bg-slate-50 p-6 rounded-[2rem] border shadow-inner">
-                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest font-black">{paymentConfig.bankName}</p>
-                                                <p className="text-2xl font-mono font-bold text-slate-800 tracking-tighter font-black">{paymentConfig.bankAccount}</p>
-                                                <p className="text-sm font-bold text-slate-600 mt-1 uppercase leading-tight font-black">{paymentConfig.bankHolder}</p>
-                                            </div>
-                                        )}
-                                        {selectedMethod === 'DANA' && (
-                                            <div className="text-left bg-sky-50 p-6 rounded-[2rem] border-2 border-sky-100 shadow-inner">
-                                                <p className="text-[10px] font-bold text-sky-400 uppercase tracking-widest font-black">DANA Wallet</p>
-                                                <p className="text-2xl font-mono font-bold text-sky-800 tracking-tighter font-black">{paymentConfig.danaNumber}</p>
-                                                <p className="text-sm font-bold text-sky-600 mt-1 uppercase leading-tight font-black">{paymentConfig.danaHolder}</p>
-                                            </div>
-                                        )}
-                                        <div className="relative border-2 border-dashed border-slate-300 rounded-2xl p-4 bg-slate-50 min-h-[120px] flex items-center justify-center cursor-pointer hover:border-emerald-500 transition-all">
-                                            <input type="file" onChange={(e) => {
-                                                const file = e.target.files[0];
-                                                if (file) {
-                                                    setIsCompressing(true);
-                                                    const reader = new FileReader();
-                                                    reader.onload = (re) => {
-                                                        const img = new Image();
-                                                        img.onload = () => {
-                                                            const canvas = document.createElement('canvas');
-                                                            canvas.width = 800; canvas.height = 800;
-                                                            const ctx = canvas.getContext('2d');
-                                                            ctx.drawImage(img, 0, 0, 800, 800);
-                                                            setProofImage(canvas.toDataURL('image/jpeg', 0.5));
-                                                            setIsCompressing(false);
-                                                        };
-                                                        img.src = re.target.result;
-                                                    };
-                                                    reader.readAsDataURL(file);
-                                                }
-                                            }} className="absolute inset-0 opacity-0 cursor-pointer z-50 w-full h-full" accept="image/*" />
-                                            {isCompressing ? <div className="spinner-small border-emerald-500 border-t-transparent mx-auto"></div> : proofImage ? <img src={proofImage} className="w-16 h-16 object-cover rounded-lg border shadow-sm mx-auto" /> : <div className="text-slate-400 flex flex-col items-center uppercase font-bold"><Icon name="upload" size={32}/><p className="text-[10px] mt-1 tracking-widest font-black uppercase">Upload Bukti Bayar</p></div>}
-                                        </div>
-                                        <button onClick={handleFinishOrder} disabled={!proofImage || isCompressing || isActionLoading} className={`w-full py-5 rounded-2xl font-black text-white text-xs tracking-[0.2em] shadow-xl transition-all flex items-center justify-center gap-2 ${proofImage ? 'bg-emerald-600 shadow-emerald-200 hover:bg-emerald-700' : 'bg-slate-300'} ${isActionLoading ? 'btn-loading' : ''}`}>
-                                            {isActionLoading ? <div className="spinner-small"></div> : null}
-                                            {isActionLoading ? 'MENGIRIM...' : 'KIRIM KONFIRMASI'}
-                                        </button>
-                                    </div>
-                                )}
-                                {step === 'success' && (
-                                    <div className="text-center py-10 space-y-8 animate-in">
-                                        <div className="w-24 h-24 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto shadow-2xl border-4 border-white"><Icon name="check" className="text-emerald-600" size={48}/></div>
-                                        <div className="px-4"><h3 className="text-3xl font-black text-emerald-600 italic uppercase tracking-tighter text-center">Data Terkirim!</h3>
-                                            <p className="text-slate-600 text-sm font-medium leading-relaxed text-center">
-                                                Terima kasih, <b>{buyerData.name}</b>! Bukti pembayaran telah kami terima. <br/><br/> 
-                                                Link <b className="text-black font-black">{showModal?.name}</b> yang anda beli akan segera dikirimkan ke nomor WhatsApp Anda oleh Admin kami. <br/><br/> 
-                                                Mohon periksa pesan masuk Anda secara berkala.
-                                            </p>
-                                        </div>
-                                        <button onClick={() => { setAppNotification('LINK AKAN DIKIRIM KE WHATSAPP ANDA'); setShowModal(null); setStep('form'); setTimeout(() => setAppNotification(''), 6000); }} className="block w-full py-5 bg-slate-900 text-white font-black rounded-3xl text-xs tracking-widest uppercase shadow-2xl transition-all hover:bg-black font-black text-white text-center">SELESAI</button>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    )}
+                    </div>
                 </div>
-            );
-        }
+            </div>`;
+        document.getElementById('regForm').onsubmit = async (e) => {
+            e.preventDefault(); const btn = document.getElementById('regBtn'); btn.disabled = true; btn.textContent = "Memproses...";
+            const schoolNameInput = document.getElementById('regSchool').value;
+            const appNameInput = document.getElementById('regAppName').value;
+            try {
+                const res = await fetch(SYSTEM_CONFIG.GOOGLE_SCRIPT_URL, { method: 'POST', body: JSON.stringify({ action: 'registerTeacher', email: document.getElementById('regEmail').value, nama_sekolah: schoolNameInput, nama_aplikasi: appNameInput })});
+                const data = await res.json();
+                if (data.ss_id) {
+                    localStorage.setItem('registeredSchoolName', schoolNameInput);
+                    localStorage.setItem('registeredAppName', appNameInput);
+                    document.getElementById('regResult').classList.remove('hidden');
+                    document.getElementById('shareLink').value = window.location.href.split('?')[0] + '?id=' + data.ss_id;
+                    btn.textContent = "Berhasil!";
+                }
+            } catch (err) { btn.disabled = false; btn.textContent = "Coba Lagi"; }
+        };
+    }
 
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
-    </script>
-</body>
+    window.copyLink = () => {
+        const text = document.getElementById('shareLink').value;
+        const ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); showToast("Link disalin!");
+    };
+
+    window.downloadLink = () => {
+        const link = document.getElementById('shareLink').value;
+        const textContent = `INFO AKSES APLIKASI: ${registeredAppName}\nSEKOLAH: ${registeredSchoolName}\n-----------------------------------------\nLINK SISWA : \n${link}\n\nCARA MASUK KE PANEL GURU:\n-----------------------------------------\n1. Buka link di atas.\n2. Nama Lengkap Siswa : * (tanda bintang)\n3. Kelas : Pilih Kelas Anda\n4. Klik Masuk.`;
+        const blob = new Blob([textContent], { type: 'text/plain' }); const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = 'instruksi_akses.txt'; a.click(); window.URL.revokeObjectURL(url); showToast("Instruksi diunduh!");
+    };
+
+    async function fetchSchoolInfo() {
+        if (!SCHOOL_ID) return;
+        try {
+            const res = await fetch(`${SYSTEM_CONFIG.GOOGLE_SCRIPT_URL}?action=getSchoolInfo&ss_id=${SCHOOL_ID}`);
+            const result = await res.json();
+            if (result.status === 'success') {
+                registeredSchoolName = result.nama_sekolah || "Sekolah";
+                registeredAppName = result.nama_aplikasi || "Amalan Siswa";
+                localStorage.setItem('registeredSchoolName', registeredSchoolName);
+                localStorage.setItem('registeredAppName', registeredAppName);
+            }
+        } catch (e) {}
+    }
+
+    function renderLogin() {
+        let classOptions = `<option value="">Pilih Kelas</option>`;
+        ['7','8','9'].forEach(g => { classOptions += `<optgroup label="Kelas ${g}">`; ['A','B','C','D','E','F','G','H','I','J'].forEach(s => { classOptions += `<option value="${g}${s}">${g}${s}</option>`; }); classOptions += `</optgroup>`; });
+        document.getElementById('app').innerHTML = `
+            <div class="min-h-screen flex items-center justify-center p-6 bg-emerald-600">
+                <div class="bg-white p-10 rounded-[2.5rem] shadow-2xl w-full max-w-md">
+                    <h1 class="text-2xl font-black text-center text-emerald-700 mb-2">${registeredAppName}</h1>
+                    <h2 class="text-xl font-bold text-center text-slate-800 mb-4">${registeredSchoolName}</h2>
+                    <form id="loginForm" class="space-y-4">
+                        <div><label class="block mb-1 font-semibold text-gray-700 text-sm">Nama Lengkap Siswa</label><input type="text" id="nama" class="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl outline-none focus:border-emerald-500 transition-all" required></div>
+                        <div><label class="block mb-1 font-semibold text-gray-700 text-sm">Kelas</label><select id="kelas" class="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl outline-none focus:border-emerald-500 transition-all" required>${classOptions}</select></div>
+                        <p class="text-[10px] text-slate-400 text-center">* Masukkan Nama "*" (bintang) untuk masuk sebagai Guru.</p>
+                        <button type="submit" class="w-full bg-emerald-600 text-white p-4 rounded-2xl font-black shadow-lg active:scale-95">Masuk Sekarang</button>
+                    </form>
+                </div>
+            </div>`;
+        document.getElementById('loginForm').onsubmit = (e) => {
+            e.preventDefault(); currentUser = { nama: document.getElementById('nama').value.trim(), kelas: document.getElementById('kelas').value };
+            localStorage.setItem('ramadhanUser', JSON.stringify(currentUser));
+            STUDENT_APP_MODULE.initLocalState();
+            if (isAdmin()) { renderAdmin(); fetchAllDataForAdmin(); } else { renderMainApp(); syncWithCloud(); }
+        };
+    }
+
+    function renderMainApp() {
+        if (!currentUser) return renderLogin();
+        document.getElementById('app').innerHTML = `
+            <div class="w-full h-full bg-emerald-600 overflow-auto">
+                <div class="max-w-4xl mx-auto p-4 pb-24">
+                    <div class="bg-white rounded-2xl p-6 mb-6 shadow-xl text-center md:text-left">
+                        <h1 class="font-black text-xl text-emerald-800">${registeredAppName}</h1>
+                        <p class="font-bold text-slate-500 text-sm mb-4">${registeredSchoolName}</p>
+                        <div class="mb-4 text-[10px] font-bold text-slate-400 uppercase flex flex-wrap justify-center md:justify-start gap-4 border-t pt-4"><span>👤 ${currentUser.nama}</span><span>🏫 ${currentUser.kelas}</span></div>
+                        <div class="flex gap-2">
+                            <button onclick="showRekapPage()" class="flex-1 px-4 py-2 bg-emerald-600 text-white rounded-xl font-bold text-xs">📊 Rekap Saya</button>
+                            <button onclick="logout()" class="px-4 py-2 bg-red-500 text-white rounded-xl font-bold text-xs">Keluar</button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-lg mb-6 sticky top-0 z-40 flex overflow-x-auto no-scrollbar">
+                        ${STUDENT_APP_MODULE.categories.map(cat => `<button onclick="setTab('${cat}')" class="tab-button flex-1 px-4 py-4 font-black text-[10px] uppercase whitespace-nowrap ${currentTab === cat ? 'active' : 'text-slate-400'}">${cat}</button>`).join('')}
+                    </div>
+                    <div id="contentArea" class="bg-white rounded-3xl p-6 min-h-[400px]"></div>
+                </div>
+            </div>`;
+        STUDENT_APP_MODULE.renderForm(document.getElementById('contentArea'), currentTab);
+    }
+
+    window.setTab = (t) => { currentTab = t; renderMainApp(); };
+
+    // --- SAVE & SYNC ---
+    async function handleSavePrayer(tgl, wkt) {
+        if (!SCHOOL_ID) return; const val = window.shalatData[tgl]?.[wkt]; if (!val) return showToast("Pilih status!", false);
+        showToast(`Simpan ${wkt}...`);
+        const rec = { ss_id: SCHOOL_ID, nama: currentUser.nama, kelas: currentUser.kelas, kategori: 'Shalat Fardu', tanggal: tgl, hadir: JSON.stringify(window.shalatData[tgl]) };
+        try { await fetch(SYSTEM_CONFIG.GOOGLE_SCRIPT_URL, { method: 'POST', body: JSON.stringify(rec) }); showToast(`${wkt} Tersimpan!`); } catch(e) {}
+    }
+
+    async function saveModuleData(tgl) {
+        if (!SCHOOL_ID) return;
+        let detail = "";
+        if (currentTab === 'Tarawih') { if (!window.tarawihData[tgl].status || !window.tarawihData[tgl].tempat) return showToast("Lengkapi data!", false); detail = JSON.stringify(window.tarawihData[tgl]); }
+        else if (currentTab === 'Puasa') { if (!window.puasaData[tgl]) return showToast("Pilih status!", false); detail = JSON.stringify(window.puasaData[tgl]); }
+        else if (currentTab === 'Tadarus') { if (!window.tadarusData[tgl].surat || !window.tadarusData[tgl].ayat) return showToast("Lengkapi data!", false); detail = JSON.stringify(window.tadarusData[tgl]); }
+        else if (currentTab === 'Ceramah') { if (!window.ceramahData[tgl].ringkasan) return showToast("Lengkapi data!", false); detail = JSON.stringify(window.ceramahData[tgl]); }
+        showToast("Menyimpan...");
+        const rec = { ss_id: SCHOOL_ID, nama: currentUser.nama, kelas: currentUser.kelas, kategori: currentTab, tanggal: tgl, hadir: detail };
+        try { await fetch(SYSTEM_CONFIG.GOOGLE_SCRIPT_URL, { method: 'POST', body: JSON.stringify(rec) }); showToast("Tersimpan!"); } catch(e) {}
+    }
+
+    async function syncWithCloud() {
+        if (!SCHOOL_ID || isAdmin()) return;
+        try {
+            const res = await fetch(`${SYSTEM_CONFIG.GOOGLE_SCRIPT_URL}?action=read&ss_id=${SCHOOL_ID}&nama=${currentUser.nama}&kelas=${currentUser.kelas}`);
+            const result = await res.json();
+            if (result.status === 'success') {
+                result.data.forEach(item => STUDENT_APP_MODULE.syncFromServer(item));
+                STUDENT_APP_MODULE.renderForm(document.getElementById('contentArea'), currentTab);
+                allRecords = result.data;
+            }
+        } catch (e) {}
+    }
+
+    // --- REKAP & ADMIN VIEW ---
+    window.showRekapPage = async () => {
+        showToast("Muat rekap...");
+        try {
+            const res = await fetch(`${SYSTEM_CONFIG.GOOGLE_SCRIPT_URL}?action=read&ss_id=${SCHOOL_ID}&nama=${currentUser.nama}&kelas=${currentUser.kelas}`);
+            const result = await res.json();
+            const items = result.data || [];
+            document.getElementById('app').innerHTML = `
+                <div class="bg-slate-50 p-6 overflow-auto h-full pb-20"><div class="max-w-4xl mx-auto">
+                    <div class="bg-white p-6 rounded-3xl mb-8 flex justify-between items-center shadow-md"><div><h1 class="font-black text-2xl">Rekap Saya</h1></div><button onclick="renderMainApp()" class="px-6 py-2 bg-emerald-600 text-white rounded-xl font-bold">KEMBALI</button></div>
+                    ${STUDENT_APP_MODULE.categories.map(cat => {
+                        const recs = items.filter(r => r.kategori === cat).sort((a,b) => a.tanggal - b.tanggal);
+                        return `<div class="bg-white rounded-2xl border mb-6 overflow-hidden"><div class="p-4 bg-emerald-50 font-black uppercase text-[10px] tracking-tight text-emerald-900">${cat}</div><div class="divide-y">${recs.map(r => `<div class="p-4 flex gap-4"><div class="bg-slate-50 p-2 rounded-xl text-center min-w-[50px]"><span class="block text-[8px] font-bold">HARI</span><span class="block font-black text-slate-800">${r.tanggal}</span></div><div class="flex-1">${STUDENT_APP_MODULE.renderDetailDisplay(cat, r.detail)}</div></div>`).join('')}</div></div>`;
+                    }).join('')}
+                </div></div>`;
+        } catch(e) {}
+    };
+
+    function renderAdmin() {
+        document.getElementById('app').innerHTML = `
+            <div class="bg-slate-100 p-6 overflow-auto h-full"><div class="max-w-6xl mx-auto">
+                <div class="bg-white p-6 rounded-3xl mb-6 flex flex-col md:flex-row justify-between items-center shadow-md gap-4"><h1 class="font-black text-2xl">PANEL GURU</h1><div class="flex gap-2"><button onclick="fetchAllDataForAdmin()" class="px-4 py-2 bg-blue-600 text-white rounded-xl font-bold text-xs">REFRESH DATA</button><button onclick="logout()" class="px-4 py-2 bg-slate-800 text-white rounded-xl font-bold text-xs">KELUAR</button></div></div>
+                <div id="studentGrid" class="grid grid-cols-1 md:grid-cols-3 gap-4"></div>
+            </div></div>`;
+    }
+
+    async function fetchAllDataForAdmin() {
+        try {
+            const res = await fetch(`${SYSTEM_CONFIG.GOOGLE_SCRIPT_URL}?action=readAll&ss_id=${SCHOOL_ID}`);
+            const result = await res.json();
+            if (result.status === 'success') {
+                allRecords = result.data; const unique = [...new Set(allRecords.map(r => JSON.stringify({nama: r.nama, kelas: r.kelas})))].map(s => JSON.parse(s));
+                document.getElementById('studentGrid').innerHTML = unique.map(s => `<div onclick="showStudentDetail('${s.nama}', '${s.kelas}')" class="bg-white p-5 rounded-3xl border hover:border-emerald-500 cursor-pointer shadow-sm"><h3 class="font-black">${s.nama}</h3><p class="text-xs font-bold text-emerald-600">${s.kelas}</p></div>`).join('');
+            }
+        } catch (e) {}
+    }
+
+    function showStudentDetail(nama, kelas) {
+        const items = allRecords.filter(r => r.nama === nama && r.kelas === kelas);
+        document.getElementById('app').innerHTML = `
+            <div class="bg-slate-50 p-6 overflow-auto h-full pb-20"><div class="max-w-4xl mx-auto">
+                <div class="bg-white p-6 rounded-3xl mb-6 flex justify-between items-center shadow-md"><div><h2 class="font-black text-xl">${nama}</h2><p class="text-xs text-emerald-600">Kelas: ${kelas}</p></div><button onclick="renderAdmin(); fetchAllDataForAdmin();" class="px-4 py-2 bg-slate-800 text-white rounded-xl font-bold text-xs">KEMBALI</button></div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    ${STUDENT_APP_MODULE.categories.map(cat => `<div class="bg-white p-6 rounded-3xl border shadow-sm"><h3 class="font-black text-[10px] uppercase text-slate-400 mb-4 border-b pb-2 tracking-widest">${cat}</h3><div class="space-y-4">${items.filter(r => r.kategori === cat).map(r => `<div class="p-3 bg-slate-50 rounded-xl text-[10px] border border-slate-100"><b>Hari ke-${r.tanggal}:</b><br><div class="mt-1">${STUDENT_APP_MODULE.renderDetailDisplay(cat, r.detail)}</div></div>`).join('')}</div></div>`).join('')}
+                </div>
+            </div></div>`;
+    }
+
+    function logout() { localStorage.clear(); location.reload(); }
+    
+    async function init() { 
+        if (!SCHOOL_ID) {
+            renderRegistration(); 
+        } else {
+            await fetchSchoolInfo(); 
+            if (!currentUser) renderLogin(); 
+            else if (isAdmin()) { renderAdmin(); fetchAllDataForAdmin(); } 
+            else { renderMainApp(); syncWithCloud(); }
+        }
+    }
+    init();
+  </script>
+ </body>
 </html>
