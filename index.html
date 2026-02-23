@@ -384,7 +384,7 @@
                         <div class="mb-6 text-center"><div class="bg-emerald-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto text-3xl mb-4 shadow-inner">🏦</div><h2 class="text-2xl font-black text-slate-800 leading-tight uppercase tracking-tight">TAGIHAN</h2></div>
                         <div class="bg-emerald-50 p-6 rounded-[2rem] border-2 border-dashed border-emerald-200 text-left mb-4">
                             <p class="text-3xl font-black text-emerald-600 uppercase mb-1 tracking-widest">${latestConfig.bank_name}</p>
-                            <p class="text-2xl font-black text-emerald-700 tracking-tighter mt-1">1234567890</p>
+                            <p class="text-2xl font-black text-emerald-700 tracking-tighter mt-1">${accParts[0]}</p>
                             ${accParts[1] ? `<p class="text-sm font-bold text-slate-600">a/n ${accParts[1]}</p>` : ''}
                             <div class="mt-4 pt-4 border-t border-emerald-200"><p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Biaya Aktivasi:</p><p class="text-3xl font-black text-slate-800">${formatRupiah(latestConfig.registration_fee)}</p></div>
                         </div>`;
